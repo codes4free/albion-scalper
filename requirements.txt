@@ -1,0 +1,28 @@
+requests
+PyYAML
+streamlit
+pandas
+matplotlib
+passlib[bcrypt]
+
+ # Example script: hash_password.py (run separately, e.g., python hash_password.py)
+    from passlib.context import CryptContext
+    import getpass # For securely getting password input
+
+    pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+    password = getpass.getpass("Enter password to hash: ")
+    hashed = pwd_context.hash(password)
+
+    print("\n--- HASHED PASSWORD ---")
+    print(f"Username: (enter this in secrets.toml as the key)")
+    print(f"Hashed Password String:\n{hashed}")
+    print("\nCopy the long hashed string (starting with $2b$...) into your .streamlit/secrets.toml file as the value for the username.")
+
+    # Example verification (optional)
+    # verify_pw = getpass.getpass("Re-enter password to verify hash: ")
+    # try:
+    #     verified = pwd_context.verify(verify_pw, hashed)
+    #     print(f"Verification successful: {verified}")
+    # except Exception as e:
+    #     print(f"Verification failed: {e}")

@@ -1,0 +1,135 @@
+# Configuration for Albion Trade Analyzer
+
+api:
+  base_url: "https://old.west.albion-online-data.com/api/v2/stats" # Base URL for price/history endpoints
+
+locations:
+  royal_cities:
+    - Lymhurst
+    - Bridgewatch
+    - Martlock
+    - Thetford
+    - Fort Sterling
+  artifact_cities:
+    - Caerleon
+  black_market: "Black Market"
+  # Combine all for convenience, analyzer will use this structure
+  all_cities:
+    - Lymhurst
+    - Bridgewatch
+    - Martlock
+    - Thetford
+    - Fort Sterling
+    - Caerleon
+    - "Black Market" # Needs quotes because of the space
+
+taxes:
+  # Estimated base sales tax rates (non-premium). Premium cuts these in half.
+  rates:
+    royal: 0.03
+    caerleon: 0.06
+    black_market: 0.04
+  # TODO: Add setting for premium status?
+  premium_modifier: 0.5 # Multiplier for tax if premium is active
+
+analysis:
+  # Default items OR categories to analyze if not overridden by CLI
+  # Use EITHER default_items OR default_categories, not both typically
+  default_items: [] # Clear this if using categories
+  default_categories:
+    - T4 Resources
+    - T5 Resources
+    - Bags T4-T6
+  default_quality: 1
+  min_net_profit: 500
+  result_limit: 25
+  use_premium_tax_rate: false
+  # New settings for volume/history:
+  fetch_history: true # Set to false to disable history fetching/volume filtering
+  history_time_scale: 24 # Time scale for history aggregation (6 = 6hrs, 24 = 1 day) - API supports 1, 6, 24
+  min_avg_daily_volume: 50 # Minimum average daily volume (over the history period fetched) to consider a scalp valid
+
+item_categories:
+  # Resources
+  "T4 Resources": { type: "regex", value: "^T4_(WOOD|ROCK|FIBER|ORE|HIDE)$" }
+  "T5 Resources": { type: "regex", value: "^T5_(WOOD|ROCK|FIBER|ORE|HIDE)$" }
+  "T6 Resources": { type: "regex", value: "^T6_(WOOD|ROCK|FIBER|ORE|HIDE)$" }
+  "T7 Resources": { type: "regex", value: "^T7_(WOOD|ROCK|FIBER|ORE|HIDE)$" }
+  "T8 Resources": { type: "regex", value: "^T8_(WOOD|ROCK|FIBER|ORE|HIDE)$" }
+
+  # Artifacts (by tier)
+  "T4 Artifacts": { type: "regex", value: "^T4_ARTEFACT_" }
+  "T5 Artifacts": { type: "regex", value: "^T5_ARTEFACT_" }
+  "T6 Artifacts": { type: "regex", value: "^T6_ARTEFACT_" }
+  "T7 Artifacts": { type: "regex", value: "^T7_ARTEFACT_" }
+  "T8 Artifacts": { type: "regex", value: "^T8_ARTEFACT_" }
+
+  # Bags & Capes
+  "All Bags": { type: "name_contains", value: " Bag" }
+  "All Capes": { type: "name_contains", value: " Cape" }
+  "Bags T4-T6": { type: "list", value: ["T4_BAG", "T5_BAG", "T6_BAG"] }
+  "Capes T4-T6": { type: "list", value: ["T4_CAPE", "T5_CAPE", "T6_CAPE"] }
+
+  # --- Standard Armor (by Type and Tier) ---
+  # Regex includes SET1, SET2, SET3 variants
+  "T4 Plate Armor": { type: "regex", value: "^T4_(HEAD|ARMOR|SHOES)_PLATE_SET[123]$" }
+  "T5 Plate Armor": { type: "regex", value: "^T5_(HEAD|ARMOR|SHOES)_PLATE_SET[123]$" }
+  "T6 Plate Armor": { type: "regex", value: "^T6_(HEAD|ARMOR|SHOES)_PLATE_SET[123]$" }
+  "T7 Plate Armor": { type: "regex", value: "^T7_(HEAD|ARMOR|SHOES)_PLATE_SET[123]$" }
+  "T8 Plate Armor": { type: "regex", value: "^T8_(HEAD|ARMOR|SHOES)_PLATE_SET[123]$" }
+
+  "T4 Leather Armor": { type: "regex", value: "^T4_(HEAD|ARMOR|SHOES)_LEATHER_SET[123]$" }
+  "T5 Leather Armor": { type: "regex", value: "^T5_(HEAD|ARMOR|SHOES)_LEATHER_SET[123]$" }
+  "T6 Leather Armor": { type: "regex", value: "^T6_(HEAD|ARMOR|SHOES)_LEATHER_SET[123]$" }
+  "T7 Leather Armor": { type: "regex", value: "^T7_(HEAD|ARMOR|SHOES)_LEATHER_SET[123]$" }
+  "T8 Leather Armor": { type: "regex", value: "^T8_(HEAD|ARMOR|SHOES)_LEATHER_SET[123]$" }
+
+  "T4 Cloth Armor": { type: "regex", value: "^T4_(HEAD|ARMOR|SHOES)_CLOTH_SET[123]$" }
+  "T5 Cloth Armor": { type: "regex", value: "^T5_(HEAD|ARMOR|SHOES)_CLOTH_SET[123]$" }
+  "T6 Cloth Armor": { type: "regex", value: "^T6_(HEAD|ARMOR|SHOES)_CLOTH_SET[123]$" }
+  "T7 Cloth Armor": { type: "regex", value: "^T7_(HEAD|ARMOR|SHOES)_CLOTH_SET[123]$" }
+  "T8 Cloth Armor": { type: "regex", value: "^T8_(HEAD|ARMOR|SHOES)_CLOTH_SET[123]$" }
+
+  # --- Standard Weapons (Broad Categories) ---
+  # These aim to capture the base lines + artifact versions that follow similar patterns.
+  # MAIN=1H, 2H=2H, OFFHAND includes things like Tomes, Shields, Torches
+  "All Swords": { type: "regex", value: "^T\\d+_(MAIN|2H)_(SWORD|CLAYMORE|DUALSWORD|SCIMITAR_MORGANA|SCYTHE_HELL|GALATINEPAIR|KINGMAKER)" }
+  "All Axes": { type: "regex", value: "^T\\d+_(MAIN|2H)_(AXE|GREATAXE|HALBERD|HALBERD_MORGANA|HANDOFKHOR|BEARPAWS_AVALON|REALMBREAKER)" } # Added HALBERD base
+  "All Maces": { type: "regex", value: "^T\\d+_(MAIN|2H)_(MACE|HEAVYMACE|FLAIL|MACE_MORGANA|INCUBUSMACE|CAMLANNMACE|OATHKEEPERS_AVALON)" }
+  "All Hammers": { type: "regex", value: "^T\\d+_(MAIN|2H)_(HAMMER|POLEHAMMER|GREAT HAMMER|HAMMER_UNDEAD|TOMB HAMMER|FORGEHAMMERS_AVALON|GROVEKEEPER)" }
+  "All Crossbows": { type: "regex", value: "^T\\d+_(MAIN|2H)_(CROSSBOW|HEAVYCROSSBOW|CROSSBOW_REPEATING|CROSSBOW_UNDEAD|BOLTCAS TERS|ENERGYSHAPER_AVALON|WEEPING REPEATER)" }
+  "All Bows": { type: "regex", value: "^T\\d+_(2H)_(BOW|WARBOW|LONGBOW|BOW_UNDEAD|BOW_KEEPER|BOW_AVALON|WHISPERINGBOW)" } # Bows are mostly 2H
+  "All Spears": { type: "regex", value: "^T\\d+_(MAIN|2H)_(SPEAR|PIKE|GLAIVE|SPEAR_KEEPER|HERONSPEAR|SPIRITHUNTER_AVALON|TRINITYSPEAR)" }
+  "All Nature Staffs": { type: "regex", value: "^T\\d+_(MAIN|2H)_(NATURESTAFF|GREATNATURESTAFF|WILDSTAFF|NATURESTAFF_KEEPER|DRUIDIC STAFF|BLIGHT STAFF_AVALON|RAMPANTSTAFF)" }
+  "All Fire Staffs": { type: "regex", value: "^T\\d+_(MAIN|2H)_(FIRESTAFF|GREATFIRESTAFF|INFERNOSTAFF|FIRESTAFF_KEEPER|WILDFIRE STAFF|BRIMSTONE STAFF_AVALON|BLAZINGSTAFF)" }
+  "All Frost Staffs": { type: "regex", value: "^T\\d+_(MAIN|2H)_(FROSTSTAFF|GREATFROSTSTAFF|GLACIALSTAFF|FROSTSTAFF_KEEPER|HOARFROST STAFF|ICICLE STAFF_AVALON|PERMAFROSTPRISM)" }
+  "All Arcane Staffs": { type: "regex", value: "^T\\d+_(MAIN|2H)_(ARCANESTAFF|GREATARCANESTAFF|ENIGMATICSTAFF|ARCANESTAFF_UNDEAD|WITCHWORK STAFF|OCCULT STAFF_AVALON|EVENINGSONG)" }
+  "All Cursed Staffs": { type: "regex", value: "^T\\d+_(MAIN|2H)_(CURSEDSTAFF|GREATCURSEDSTAFF|DEMONICSTAFF|CURSEDSTAFF_UNDEAD|SKULL_HELL|DAMNATION STAFF_AVALON|SHADOWCALLER)" }
+  "All Daggers": { type: "regex", value: "^T\\d+_(MAIN|2H)_(DAGGER|DAGGERPAIR|CLAWS|RAPIER_MORGANA|BLOODLETTER_HELL|DEMONFANG_AVALON|DEATHGIVERS)" } # Added pairs, claws etc.
+  "All Quarterstaffs": { type: "regex", value: "^T\\d+_(2H)_(QUARTERSTAFF|IRONCLADEDSTAFF|DOUBLEBLADEDSTAFF|STAFF_UNDEAD|BLACKMONK STAFF|STAFF_AVALON|GRAILSEEKER)" } # Mostly 2H
+  "All Shapeshifter Staffs": { type: "regex", value: "^T\\d+_(MAIN|2H)_SHAPESHIFTER_(STAFF|HELL|AVALON|KEEPER|MORGANA|UNDEAD)" } # Regex attempt for shapeshifter
+  "All Offhands": { type: "regex", value: "^T\\d+_OFF_(TORCH|SHIELD|BOOK|HORN_KEEPER|DEMONSKULL_HELL|EYE_AVALON|MISTCALLER_AVALON|TAPROOT_KEEPER|CRYPTSKULL_UNDEAD)"} # Common offhands
+
+  # Mounts (by Tier - excludes skins)
+  "T3 Mounts": { type: "regex", value: "^T3_MOUNT_" }
+  "T4 Mounts": { type: "regex", value: "^T4_MOUNT_" }
+  "T5 Mounts": { type: "regex", value: "^T5_MOUNT_" }
+  "T6 Mounts": { type: "regex", value: "^T6_MOUNT_" }
+  "T7 Mounts": { type: "regex", value: "^T7_MOUNT_" }
+  "T8 Mounts": { type: "regex", value: "^T8_MOUNT_" }
+
+  # Specific Mount Types (Examples)
+  "All Horses": { type: "regex", value: "^T\\d+_MOUNT_HORSE" }
+  "All Oxen": { type: "regex", value: "^T\\d+_MOUNT_OX" }
+  "Direwolves": { type: "regex", value: "^T6_MOUNT_DIREWOLF" }
+  "Mammoths": { type: "regex", value: "^T8_MOUNT_MAMMOTH" }
+
+cache:
+  # ... (cache settings - TTL might be longer for history?) ...
+  enabled: true
+  directory: "cache/api_responses"
+  ttl_seconds: 900 # Keep TTL same for now, maybe increase later for history if needed
+
+logging:
+  level: INFO # Options: DEBUG, INFO, WARNING, ERROR, CRITICAL
+  format: '%(asctime)s - %(levelname)s - [%(module)s:%(lineno)d] - %(message)s' 

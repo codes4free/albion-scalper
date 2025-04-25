@@ -1,0 +1,59 @@
+from albion_analyzer.utils.item_mapping import get_item_ids_by_category, get_item_name, _load_item_data
+
+def get_item_ids_by_category(category_name: str) -> list[str]:
+    """
+    Returns a list of item IDs belonging to the specified category defined in config.
+
+    Args:
+        category_name: The name of the category (must match a key in config's item_categories).
+
+    Returns:
+        A list of matching item IDs, or an empty list if category not found or no items match.
+    """
+    _load_item_data() # Ensure data is loaded
+
+    logging.debug(f"[Category] Expanding '{category_name}'. Item map size: {len(ITEM_ID_TO_NAME)}.")
+    if not ITEM_ID_TO_NAME:
+        logging.error(f"[Category] Cannot expand '{category_name}', ITEM_ID_TO_NAME is empty.")
+        # Add sample check here if needed for deeper debug
+        return []
+    # else:
+        # keys_sample = list(ITEM_ID_TO_NAME.keys())[:5]
+        # names_sample = [ITEM_ID_TO_NAME[k] for k in keys_sample]
+        # logging.debug(f"[Category] Item map seems populated. Sample keys: {keys_sample}")
+        # logging.debug(f"[Category] Corresponding sample names: {names_sample}")
+
+
+    category_rule = ITEM_CATEGORIES.get(category_name)
+    if not category_rule:
+        logging.warning(f"Category '{category_name}' not found in configuration.")
+        return []
+
+    rule_type = category_rule.get('type')
+    rule_value = category_rule.get('value')
+    if not rule_type or rule_value is None:
+        logging.warning(f"Invalid rule definition for category '{category_name}': {category_rule}")
+        return []
+
+    matching_ids = []
+    try:
+        if rule_type == 'list':
+            if isinstance(rule_value, list):
+                matching_ids = [item_id for item_id in rule_value if item_id in ITEM_ID_TO_NAME]
+                if len(matching_ids) != len(rule_value): logging.warning(f"Category '{category_name}': Some listed IDs not found ({len(rule_value) - len(matching_ids)} missing).")
+            else: logging.warning(f"Category '{category_name}' type 'list' requires list value.")
+        elif rule_type == 'regex':
+            if isinstance(rule_value, str):
+                pattern = re.compile(rule_value); matching_ids = [item_id for item_id in ITEM_ID_TO_NAME if pattern.match(item_id)]
+            else: logging.warning(f"Category '{category_name}' type 'regex' requires string value.")
+        elif rule_type == 'name_contains':
+            if isinstance(rule_value, str):
+                search_term_lower = rule_value.lower(); matching_ids = [item_id for item_id, item_name in ITEM_ID_TO_NAME.items() if search_term_lower in item_name.lower()]
+            else: logging.warning(f"Category '{category_name}' type 'name_contains' requires string value.")
+        else: logging.warning(f"Unsupported category type '{rule_type}'.")
+    except re.error as e: logging.error(f"Invalid regex '{rule_value}' for '{category_name}': {e}"); return []
+    except Exception as e: logging.error(f"Error processing category '{category_name}': {e}", exc_info=True); return []
+
+    if not matching_ids: logging.info(f"[Category] No items found for '{category_name}'.")
+    else: logging.debug(f"[Category] '{category_name}' expanded to {len(matching_ids)} items.")
+    return matching_ids
