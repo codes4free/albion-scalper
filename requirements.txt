@@ -1,9 +1,4 @@
-requests
-PyYAML
 streamlit
+requests
 pandas
-matplotlib
-passlib[bcrypt]
-python-dotenv
-python-jose[cryptography]
-email-validator
+pyyaml

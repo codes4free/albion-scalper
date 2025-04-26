@@ -1,0 +1,4 @@
+[server]
+headless  = true      # don’t launch a browser
+port      = 8501
+enableCORS = false    # we’ll put Nginx in front
