@@ -32,3 +32,5 @@ The Norfind Market Scalp Analyzer is open-sourced under the [MIT License](LICENS
 For support, please open an issue on GitHub or participate in the repository's discussion forum.
 
 Experience the ultimate tool designed to help Albion Online players seize every market opportunity with confidence!
+
+##If you liked the app feel free to send me some coins in game "Norfind" ... Thank you.
