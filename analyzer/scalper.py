@@ -4,6 +4,8 @@ from statistics import mean # For averaging volume if needed
 from data_fetcher.market_data import get_item_prices, get_item_history
 from utils.item_mapping import get_item_name
 from utils.config_loader import get_config # Import config loader
+from datetime import datetime  # Added to process timestamps
+from zoneinfo import ZoneInfo  # Added to support local time conversion
 
 # Configure logging
 # logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -63,8 +65,8 @@ def get_tax_rate(location: str, use_premium: bool) -> float:
 def find_potential_scalps(
     item_ids: list[str],
     locations: list[str] | None = None,
-    quality: int = 1,
-    min_net_profit: int = 1,
+    quality: int | None = 1,
+    min_margin_percent: int = 1,  # minimum profit margin percentage required
     use_premium: bool = False,
     min_volume_threshold: int | None = None
 ):
@@ -75,7 +77,7 @@ def find_potential_scalps(
         item_ids: A list of item IDs to analyze.
         locations: A list of locations to compare prices across. Defaults to all major cities + Black Market.
         quality: The specific item quality level (1-5) to analyze.
-        min_net_profit: The minimum net profit required for a scalp to be included in results.
+        min_margin_percent: The minimum profit margin percentage required for a scalp to be included in results.
         use_premium: If True, calculates tax using the premium modifier.
         min_volume_threshold: Overrides the minimum volume from config if provided.
 
@@ -101,18 +103,33 @@ def find_potential_scalps(
     volume_filter = min_volume_threshold if min_volume_threshold is not None else MIN_AVG_DAILY_VOLUME
     should_fetch_history = FETCH_HISTORY and volume_filter > 0
 
-    logging.info(f"Finding scalps for {len(item_ids)} items in {analysis_locations} (Q{quality})")
-    logging.info(f"Tax: {'Premium' if use_premium else 'Standard'}, Min Profit: {min_net_profit:,}, Min Volume: {volume_filter if should_fetch_history else 'N/A'}")
+    # Log the quality being analyzed
+    quality_log_str = f"Q{quality}" if quality is not None else "Q1-5 (All)"
+    logging.info(f"Finding scalps for {len(item_ids)} items in {analysis_locations} ({quality_log_str})")
+    logging.info(f"Tax: {'Premium' if use_premium else 'Standard'}, Min Profit: {min_margin_percent}%")
 
     # --- Fetch Price Data ---
-    price_data = get_item_prices(item_ids, locations=analysis_locations, qualities=[quality])
-    if not price_data: logging.warning("[Scalper] No price data received."); return []
+    # Determine qualities to fetch
+    qualities_to_fetch = [1, 2, 3, 4, 5] if quality is None else [quality]
+    logging.info(f"Fetching prices for qualities: {qualities_to_fetch}")
+    raw_price_data = get_item_prices(item_ids, locations=analysis_locations, qualities=qualities_to_fetch)
+    if not raw_price_data:
+        logging.warning("[Scalper] No price data received.")
+        return []
+    if isinstance(raw_price_data, dict) and "data" in raw_price_data:
+        price_data = raw_price_data["data"]
+    else:
+        price_data = raw_price_data
 
     # --- Fetch History Data (Optional) ---
     history_data_map = defaultdict(lambda: defaultdict(int)) # item_id -> location -> avg_volume
     if should_fetch_history:
-        logging.info("[Scalper] Fetching history data for volume analysis...")
-        history_raw = get_item_history(item_ids, locations=analysis_locations, quality=quality)
+        # Determine quality for history fetch
+        # Simplification: Fetch only Q1 history even when analyzing all qualities for volume check
+        # Modify this if full history across all qualities is needed (more complex)
+        history_quality_to_fetch = 1 if quality is None else quality
+        logging.info(f"[Scalper] Fetching history data (Q{history_quality_to_fetch}) for volume analysis...")
+        history_raw = get_item_history(item_ids, locations=analysis_locations, quality=history_quality_to_fetch)
         if history_raw:
             logging.info(f"[Scalper] Processing {len(history_raw)} item/location history entries...")
             temp_volume_store = defaultdict(lambda: defaultdict(list)) # item -> loc -> [vol1, vol2,...]
@@ -164,76 +181,101 @@ def find_potential_scalps(
             logging.warning("[Scalper] Failed to fetch/process history data, volume filtering skipped.")
             should_fetch_history = False # Disable filter
 
-    # --- Organize Price Data ---
-    market_info = defaultdict(dict)
+    # --- Organize Price Data by Item -> Quality -> Location ---
+    market_info = defaultdict(lambda: defaultdict(lambda: defaultdict(dict))) # item -> quality -> location -> {buy, sell}
+    processed_price_points = 0
     for item_data in price_data:
-        # Make sure city name matches exactly (case-sensitive as per API examples)
         location = item_data.get('city')
-        if not location: continue # Skip if no city info
+        item_quality = item_data.get('quality')
+        item_id = item_data.get('item_id')
 
-        # Ensure the data is for the correct quality and location
-        if item_data.get('quality') == quality and location in analysis_locations:
-            item_id = item_data['item_id']
-            buy_price = max(0, item_data.get('buy_price_max', 0))
-            sell_price = max(0, item_data.get('sell_price_min', 0))
+        # Basic validation
+        if not location or not item_quality or not item_id:
+            logging.debug(f"[Scalper|PriceProc] Skipping price data point with missing fields: {item_data}")
+            continue
 
-            market_info[item_id][location] = {
-                "buy": buy_price,
-                "sell": sell_price
-            }
+        # Ensure location is one we are analyzing
+        if location not in analysis_locations:
+            continue
+
+        # Store prices (No need to filter by input 'quality' here, we do that in the next stage)
+        buy_price = max(0, item_data.get('buy_price_max', 0))
+        sell_price = max(0, item_data.get('sell_price_min', 0))
+
+        market_info[item_id][item_quality][location] = {
+            "buy": buy_price,
+            "sell": sell_price
+        }
+        processed_price_points += 1
+    logging.info(f"Organized {processed_price_points} price points into market_info structure.")
 
     potential_scalps = []
 
-    for item_id, locations_data in market_info.items():
+    # --- Identify Scalps --- 
+    # Determine which qualities to iterate over based on input
+    qualities_to_check = [1, 2, 3, 4, 5] if quality is None else [quality]
+
+    for item_id, quality_data in market_info.items():
         item_name = get_item_name(item_id) or item_id
 
-        # Make sure buy_loc is one of the locations we intended to analyze
-        valid_buy_locations = [loc for loc in locations_data if loc in analysis_locations and loc != BLACK_MARKET]
+        for current_quality in qualities_to_check:
+            if current_quality not in quality_data:
+                # No data for this item at this quality
+                continue
 
-        for buy_loc in valid_buy_locations:
-            buy_price_info = locations_data[buy_loc]
-            buy_price = buy_price_info['sell']
-            if buy_price <= 0: continue
+            locations_data = quality_data[current_quality]
 
-            valid_sell_locations = [loc for loc in locations_data if loc in analysis_locations and loc != buy_loc]
+            # Make sure buy_loc is one of the locations we intended to analyze
+            valid_buy_locations = [loc for loc in locations_data if loc in analysis_locations and loc != BLACK_MARKET]
 
-            for sell_loc in valid_sell_locations:
-                sell_price_info = locations_data[sell_loc]
-                sell_price = sell_price_info['buy']
-                if sell_price <= 0: continue
+            for buy_loc in valid_buy_locations:
+                buy_price_info = locations_data.get(buy_loc)
+                if not buy_price_info: continue
+                # Buy opportunity uses the MIN sell price at the buy location
+                buy_price = buy_price_info['sell'] 
+                if buy_price <= 0: continue
 
-                # --- Volume Check ---
-                if should_fetch_history:
-                    avg_volume_sell_loc = history_data_map.get(item_id, {}).get(sell_loc, 0)
-                    logging.debug(f"[Scalper|VolumeCheck] Item: {item_id} ({buy_loc}->{sell_loc}), SellLocVol: {avg_volume_sell_loc}, Threshold: {volume_filter}")
-                    if avg_volume_sell_loc < volume_filter:
-                        logging.debug(f"Skipping {item_id} ({buy_loc}->{sell_loc}): Volume {avg_volume_sell_loc} < {volume_filter}")
-                        continue # Skip if volume is too low
-                else:
-                    avg_volume_sell_loc = None # Indicate volume wasn't checked
+                valid_sell_locations = [loc for loc in locations_data if loc in analysis_locations and loc != buy_loc]
 
-                # --- Profit Calculation (same as before) ---
-                potential_gross_profit = sell_price - buy_price
-                if potential_gross_profit <= 0: continue
-                tax_rate = get_tax_rate(sell_loc, use_premium)
-                estimated_tax = int(sell_price * tax_rate)
-                potential_net_profit = potential_gross_profit - estimated_tax
+                for sell_loc in valid_sell_locations:
+                    sell_price_info = locations_data.get(sell_loc)
+                    if not sell_price_info: continue
+                    # Sell opportunity uses the MAX buy price (buy order) at the sell location
+                    sell_price = sell_price_info['buy'] 
+                    if sell_price <= 0: continue
 
-                if potential_net_profit >= min_net_profit:
+                    # --- Volume Check (remains the same, checks Q1 history as proxy) ---
+                    if should_fetch_history:
+                        avg_volume_sell_loc = history_data_map.get(item_id, {}).get(sell_loc, 0)
+                        # logging.debug(f"[Scalper|VolumeCheck] Item: {item_id} Q{current_quality} ({buy_loc}->{sell_loc}), SellLocVol: {avg_volume_sell_loc}, Threshold: {volume_filter}")
+                        if avg_volume_sell_loc < volume_filter:
+                            # logging.debug(f"Skipping {item_id} Q{current_quality} ({buy_loc}->{sell_loc}): Volume {avg_volume_sell_loc} < {volume_filter}")
+                            continue # Skip if volume is too low
+                    else:
+                        avg_volume_sell_loc = None # Indicate volume wasn't checked
+
+                    # --- Profit Calculation (using prices for current_quality) ---
+                    potential_gross_profit = sell_price - buy_price
+                    if potential_gross_profit <= 0: continue
+                    tax_rate = get_tax_rate(sell_loc, use_premium)
+                    estimated_tax = int(sell_price * tax_rate)
+                    potential_net_profit = potential_gross_profit - estimated_tax
                     try:
                         profit_margin = (potential_net_profit / buy_price) * 100
                     except ZeroDivisionError:
                         profit_margin = float('inf') if potential_net_profit > 0 else 0
 
+                    if profit_margin < min_margin_percent:
+                        continue
+
                     scalp = {
-                        "item_id": item_id, "item_name": item_name, "quality": quality,
+                        "item_id": item_id, "item_name": item_name, "quality": current_quality,
                         "buy_location": buy_loc, "buy_price": buy_price,
                         "sell_location": sell_loc, "sell_price": sell_price,
                         "estimated_tax": estimated_tax,
                         "potential_gross_profit": potential_gross_profit,
                         "potential_net_profit": potential_net_profit,
                         "profit_margin_percent": round(profit_margin, 2),
-                        # Add volume info
                         "avg_daily_volume": avg_volume_sell_loc
                     }
                     potential_scalps.append(scalp)
@@ -262,7 +304,7 @@ if __name__ == "__main__":
         print(f"Items: {items_to_analyze}")
         print(f"Locations: {target_locations}")
         print(f"Quality: {quality_level}")
-        print(f"Min Net Profit: {min_profit_threshold:,}")
+        print(f"Min Margin %: {min_profit_threshold}%")
         print(f"Using Premium Tax Rates: {use_premium}")
         print(f"Volume Threshold: {volume_threshold if volume_threshold > 0 else 'N/A'}")
         print("-" * 30)
@@ -271,7 +313,7 @@ if __name__ == "__main__":
             item_ids=items_to_analyze,
             locations=target_locations, # Explicitly pass locations
             quality=quality_level,
-            min_net_profit=min_profit_threshold,
+            min_margin_percent=min_profit_threshold,
             use_premium=use_premium,
             min_volume_threshold=volume_threshold
         )

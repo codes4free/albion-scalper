@@ -100,6 +100,34 @@ def _parse_item_file(file_path: Path):
     except Exception as e:
         logging.error(f"[Parse] An unexpected error occurred during JSON parsing: {e}", exc_info=True)
 
+def _load_custom_item_categories() -> dict:
+    """Loads custom item categories from the assets/item_ids.txt file. The file is expected to have comma-separated values with at least two columns: item_id, category. Lines starting with '#' are ignored."""
+    from pathlib import Path
+    custom_categories = {}
+    # Determine the file path relative to this file
+    custom_file_path = Path(__file__).parent.parent / "assets" / "item_ids.txt"
+    if not custom_file_path.exists():
+        logging.info(f"[Custom Categories] File not found: {custom_file_path}")
+        return {}
+    logging.info(f"[Custom Categories] Loading custom item categories from {custom_file_path}")
+    try:
+        with open(custom_file_path, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith("#"):
+                    continue
+                parts = line.split(",")
+                if len(parts) < 2:
+                    continue
+                item_id = parts[0].strip()
+                category = parts[1].strip()
+                if category not in custom_categories:
+                    custom_categories[category] = []
+                custom_categories[category].append(item_id)
+    except Exception as e:
+        logging.error(f"[Custom Categories] Error reading custom item categories: {e}")
+        return {}
+    return custom_categories
 
 def _load_item_data():
     """Ensures the item data and categories are loaded."""
@@ -136,19 +164,25 @@ def _load_item_data():
     else:
         logging.debug("[Load] ITEM_ID_TO_NAME map already populated.")
 
-
     # Load categories IF NOT ALREADY LOADED
-    if not ITEM_CATEGORIES:
-        logging.info("[Load] Item categories map is empty, loading from config.")
-        try:
-            config = get_config()
-            ITEM_CATEGORIES = config.get('item_categories', {})
-            logging.info(f"[Load] Loaded {len(ITEM_CATEGORIES)} item categories from config.")
-        except Exception as e:
-            logging.error(f"[Load] Failed to load item categories from config: {e}")
-            ITEM_CATEGORIES = {}
-    else:
-        logging.debug("[Load] Item categories map already populated.")
+    try:
+        config = get_config()
+        ITEM_CATEGORIES = config.get('item_categories', {})
+        logging.info(f"[Load] Loaded {len(ITEM_CATEGORIES)} item categories from config.")
+    except Exception as e:
+        logging.error(f"[Load] Failed to load item categories from config: {e}")
+        ITEM_CATEGORIES = {}
+
+    # Now load custom categories from asset file if available
+    custom_categories = _load_custom_item_categories()
+    if custom_categories:
+        for cat, ids in custom_categories.items():
+            ITEM_CATEGORIES[cat] = { "type": "list", "value": ids };
+            if cat.endswith("s"):
+                singular = cat[:-1];
+                if singular not in ITEM_CATEGORIES:
+                    ITEM_CATEGORIES[singular] = { "type": "list", "value": ids };
+        logging.info(f"[Load] Custom item categories loaded: {list(custom_categories.keys())}");
 
     # Set flag only if item data seems successfully loaded
     if ITEM_ID_TO_NAME:
