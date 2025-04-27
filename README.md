@@ -1,4 +1,4 @@
-# Norfind Market Scalp Analyzer
+# Market Scalp Analyzer by Norfind
 
 The Norfind Market Scalp Analyzer is a powerful tool for Albion Online players who want to maximize their profits in the dynamic market environment. It leverages real-time market data, historical price trends, and intelligent tax calculations to provide actionable scalp opportunities directly from your desktop or via a convenient web dashboard.
 
