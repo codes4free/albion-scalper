@@ -46,7 +46,7 @@ def send_verification_email(email: str, verification_token: str) -> bool:
         msg['Subject'] = "Verify your email for Albion Scalp Analyzer"
 
         # Create verification link
-        verification_link = f"http://localhost:8501/verify?token={verification_token}"
+        verification_link = f"http://albionscalper.online/verify?token={verification_token}"
 
         # Email body
         body = f"""

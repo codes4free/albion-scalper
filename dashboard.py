@@ -1,5 +1,5 @@
 import streamlit as st
-st.set_page_config(page_title="Albion Scalper", page_icon=":game_die:", layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(page_title="Albion Scalper", page_icon="images/albion_logo_new.png", layout="wide", initial_sidebar_state="expanded")
 
 import pandas as pd
 import logging # Import logging
